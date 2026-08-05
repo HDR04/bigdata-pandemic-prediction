@@ -1,6 +1,6 @@
 # Prédiction des Pandémies — Architecture Big Data (Hadoop / Spark / Kafka)
 
-**Auteur :** Drissi Houssam — IATE S
+**Auteur :** Drissi Houssam 
 
 Mise en place d'une architecture Big Data scalable pour l'analyse en temps réel de données de mobilité, appliquée à la prédiction de la propagation des pandémies.
 
