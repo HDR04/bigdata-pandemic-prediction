@@ -1,6 +1,6 @@
 # Prédiction des Pandémies — Architecture Big Data (Hadoop / Spark / Kafka)
 
-**Auteur :** Drissi Houssam 
+**Auteur :** Drissi Houssam
 
 Mise en place d'une architecture Big Data scalable pour l'analyse en temps réel de données de mobilité, appliquée à la prédiction de la propagation des pandémies.
 
@@ -65,7 +65,97 @@ Le modèle entraîné est sauvegardé dans HDFS et rechargé en temps réel par 
 
 **Grafana** (complémentaire) : surveillance temps réel du taux de nouveaux cas et de l'efficacité des mesures de confinement.
 
-## 7. Structure du dépôt
+## 7. Environnement Docker
+
+Tout le projet a été développé dans un environnement Docker unique regroupant **Hadoop, Spark, Kafka et PostgreSQL**, construit à partir d'une image de base Hadoop (cluster 3 nœuds) enrichie manuellement avec Kafka, Spark et PostgreSQL.
+
+### 7.1 Image de base — cluster Hadoop (3 nœuds)
+
+```bash
+docker pull elmendili/bigdata-hadoop:first
+```
+
+**Créer le réseau Docker :**
+```bash
+docker network create --driver=bridge hadoop
+```
+
+**Lancer les 3 conteneurs :**
+
+Master (NameNode + ResourceManager) :
+```bash
+docker run -itd --net=hadoop \
+  -p 9870:9870 -p 8088:8088 -p 7077:7077 -p 16010:16010 \
+  --name hadoop-master --hostname hadoop-master \
+  elmendili/bigdata-hadoop:first
+```
+
+Slave 1 (DataNode + NodeManager) :
+```bash
+docker run -itd -p 8040:8042 --net=hadoop \
+  --name hadoop-slave1 --hostname hadoop-slave1 \
+  elmendili/bigdata-hadoop:first
+```
+
+Slave 2 (DataNode + NodeManager) :
+```bash
+docker run -itd -p 8041:8042 --net=hadoop \
+  --name hadoop-slave2 --hostname hadoop-slave2 \
+  elmendili/bigdata-hadoop:first
+```
+
+**Vérifier et démarrer le cluster :**
+```bash
+docker ps                              # les 3 conteneurs doivent être "Up"
+docker exec -it hadoop-master bash     # entrer dans le master
+./start-hadoop.sh                      # démarre HDFS + YARN
+```
+
+**Interfaces web :**
+
+| Interface | URL | Description |
+|---|---|---|
+| NameNode (HDFS) | http://localhost:9870 | État du cluster HDFS |
+| ResourceManager (YARN) | http://localhost:8088 | Suivi des jobs MapReduce/Spark |
+
+### 7.2 Services additionnels (installés manuellement dans `hadoop-master`)
+
+| Service | Rôle dans le projet | Port |
+|---|---|---|
+| Apache Kafka | Broker de messages (`producer.py` → `test3.py`) | 9092 |
+| Apache Spark | Traitement batch et streaming | 7077 |
+| PostgreSQL | Stockage des prédictions (lu par `app.py`) | 5432 |
+
+Ces services tournent dans le même conteneur `hadoop-master` et communiquent en local (hostname `hadoop-master`).
+
+### 7.3 Publier l'image personnalisée sur Docker Hub
+
+Une fois Kafka/Spark/PostgreSQL installés dans `hadoop-master`, on peut figer cet état dans une image et la publier :
+
+```bash
+docker login
+docker commit hadoop-master <votre-pseudo-dockerhub>/bigdata-pandemic-prediction:latest
+docker push <votre-pseudo-dockerhub>/bigdata-pandemic-prediction:latest
+```
+
+### 7.4 Reproduire l'environnement complet à partir de l'image publiée
+
+```bash
+docker network create --driver=bridge hadoop
+
+docker run -itd --net=hadoop \
+  -p 9870:9870 -p 8088:8088 -p 7077:7077 -p 16010:16010 \
+  -p 9092:9092 -p 5432:5432 \
+  --name hadoop-master --hostname hadoop-master \
+  <votre-pseudo-dockerhub>/bigdata-pandemic-prediction:latest
+
+docker exec -it hadoop-master bash
+./start-hadoop.sh
+```
+
+Puis démarrer Kafka et PostgreSQL dans le conteneur, et exécuter les scripts du dossier `scripts/` (voir section 9 ci-dessous).
+
+## 8. Structure du dépôt
 
 ```
 .
@@ -79,11 +169,12 @@ Le modèle entraîné est sauvegardé dans HDFS et rechargé en temps réel par 
 │   └── scripts.ipynb       # Notebook d'exploration et de développement
 ├── data/
 │   └── 2021_2022_MA_Region_Mobility_Report.csv
-└── docs/
-    └── rapport_projet.pdf  # Rapport complet du projet
+├── docs/
+│   └── rapport_projet.pdf  # Rapport complet du projet
+└── README.md
 ```
 
-## 8. Commandes clés
+## 9. Commandes clés
 
 ```bash
 # Conversion des données
@@ -102,12 +193,12 @@ spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 scripts
 streamlit run scripts/app.py
 ```
 
-## 9. Pistes d'amélioration
+## 10. Pistes d'amélioration
 
 - Intégrer des données météo (impact sur la propagation)
 - Passer à un modèle Deep Learning (LSTM) pour les séries temporelles
 
-## 10. Références
+## 11. Références
 
 - [Documentation Spark MLlib](https://spark.apache.org/docs/latest/ml-guide.html)
 - [Documentation Streamlit](https://docs.streamlit.io/)
